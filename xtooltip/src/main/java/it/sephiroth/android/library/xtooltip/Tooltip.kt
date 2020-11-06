@@ -14,6 +14,7 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.PopupWindow.INPUT_METHOD_NOT_NEEDED
 import android.widget.TextView
 import androidx.annotation.IdRes
@@ -23,6 +24,7 @@ import androidx.annotation.StyleRes
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.text.HtmlCompat
+import androidx.core.view.drawToBitmap
 import androidx.core.view.setPadding
 import timber.log.Timber
 import java.lang.ref.WeakReference
@@ -62,6 +64,7 @@ class Tooltip private constructor(private val context: Context, builder: Builder
     private val mHandler = Handler()
 
     private var mPopupView: TooltipViewContainer? = null
+    private var mAnchorHighlightImageView: ImageView? = null
     private var mText: CharSequence?
     private var mAnchorPoint: Point
     private var mShowArrow: Boolean
@@ -124,7 +127,7 @@ class Tooltip private constructor(private val context: Context, builder: Builder
                         offsetBy(
                                 (mNewLocation[0] - mOldLocation!![0]).toFloat(),
                                 (mNewLocation[1] - mOldLocation!![1]).toFloat()
-                                )
+                        )
                     }
 
                     mOldLocation!![0] = mNewLocation[0]
@@ -137,12 +140,12 @@ class Tooltip private constructor(private val context: Context, builder: Builder
 
     init {
         val theme = context.theme
-            .obtainStyledAttributes(
-                    null,
-                    R.styleable.TooltipLayout,
-                    builder.defStyleAttr,
-                    builder.defStyleRes
-                                   )
+                .obtainStyledAttributes(
+                        null,
+                        R.styleable.TooltipLayout,
+                        builder.defStyleAttr,
+                        builder.defStyleRes
+                )
         this.mPadding = theme.getDimensionPixelSize(R.styleable.TooltipLayout_ttlm_padding, 30)
         mOverlayStyle =
                 theme.getResourceId(
@@ -343,7 +346,7 @@ class Tooltip private constructor(private val context: Context, builder: Builder
             viewContainer.measureAllChildren = true
             viewContainer.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
 
-            Timber.i("viewContainer size: ${viewContainer.measuredWidth}, ${viewContainer.measuredHeight}")
+            Timber.i("viewContiner size: ${viewContainer.measuredWidth}, ${viewContainer.measuredHeight}")
             Timber.i("contentView size: ${contentView.measuredWidth}, ${contentView.measuredHeight}")
 
             mTextView.addOnAttachStateChangeListener {
@@ -367,7 +370,56 @@ class Tooltip private constructor(private val context: Context, builder: Builder
             }
 
             mContentView = contentView
+            viewContainer.setBackgroundColor(Color.argb(0.5f, 0f, 0f, 0f))
+            addAnchorHighlightImageView(viewContainer)
             mPopupView = viewContainer
+        }
+    }
+
+    private fun addAnchorHighlightImageView(viewContainer: FrameLayout) {
+
+        val highlightImageViewPosition = findAnchorHighlightPosition(viewContainer) ?: return
+
+        val highlightImageView = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER
+        }
+        viewContainer.addView(highlightImageView, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+            leftMargin = highlightImageViewPosition.x
+            topMargin = highlightImageViewPosition.y
+        })
+        mAnchorView?.get()?.let { anchorView ->
+            val bitmap = anchorView.drawToBitmap()
+            highlightImageView.setImageBitmap(bitmap)
+        }
+
+        addAnchorHighlightAnimation(highlightImageView)
+
+        mAnchorHighlightImageView = highlightImageView
+    }
+
+    private fun findAnchorHighlightPosition(viewContainer: FrameLayout): Point? {
+
+        mAnchorView?.get()?.let { anchorView ->
+
+            val containerPosition = intArrayOf(0, 0)
+            viewContainer.getLocationOnScreen(containerPosition)
+
+            val anchorPosition = intArrayOf(0, 0)
+            anchorView.getLocationOnScreen(anchorPosition)
+
+            return Point(anchorPosition[0] - containerPosition[0], anchorPosition[1] - containerPosition[1])
+        }
+        return null
+    }
+
+    private fun addAnchorHighlightAnimation(targetView: View) {
+
+        arrayOf("scaleX", "scaleY").forEach {
+            val animator = ObjectAnimator.ofFloat(targetView, it, 1f, 1.2f, 1f)
+            animator.interpolator = AccelerateDecelerateInterpolator()
+            animator.duration = 2000
+            animator.repeatCount = ObjectAnimator.INFINITE
+            animator.start()
         }
     }
 
@@ -488,7 +540,7 @@ class Tooltip private constructor(private val context: Context, builder: Builder
                     contentPosition.y,
                     contentPosition.x + w,
                     contentPosition.y + h
-                                )
+            )
             if (!displayFrame.rectContainsWithTolerance(finalRect, mSizeTolerance.toInt())) {
                 Timber.e("content won't fit! $displayFrame, $finalRect")
                 return findPosition(parent, anchor, offset, gravities, params, fitToScreen)
@@ -636,7 +688,7 @@ class Tooltip private constructor(private val context: Context, builder: Builder
                         gravities,
                         params,
                         fitToScreen)
-                   )
+        )
     }
 
     fun hide() {
@@ -807,7 +859,7 @@ class Tooltip private constructor(private val context: Context, builder: Builder
             get() = arrowPoint.y + mOffsetY // - displayFrame.top
 
         var contentPointX: Float = 0f
-            get () = contentPoint.x + mOffsetX
+            get() = contentPoint.x + mOffsetX
 
         var contentPointY: Float = 0f
             get() = contentPoint.y + mOffsetY // - displayFrame.top
